@@ -8,20 +8,20 @@ go get github.com/pastebt/sess
 ```
 
 ## Usage
-### init
+### Init
 You have to init the session system when your server start, give the path 
-where to keep persistance data for your session. 
+where to save persistent data for your session. 
 
 ```go
 import "github.com/pastebt/sess"
 
-sess.Init("")
+sess.Init("/path/to/save/data/")
 ```
 If leave it as default "", session will keep in memory.
 
 
 ### Get / Set session
-In a net/http handler function, you can use it
+In a net/http handler function, you can use it like this:
 
 ```go
 func handler(w ResponseWriter, r *Request) {
