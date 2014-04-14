@@ -70,15 +70,21 @@ func Init(sfn string) error {
     } else {                // save to disk
         logging.Debug("save session to disk")
         for n, si := range sessPool.sess {
+            j, e := json.Marshal(si.data)
+            if e != nil { logging.Error(e); return e }
+
+            buf := new(bytes.Buffer)
+            buf.WriteString(si.id + "\n")
+            buf.WriteString("0" + "\n") // TODO expire time
+            buf.Write(j)
+
             fout, e := os.OpenFile(filepath.Join(sfn, n) + ".sess",
                                    os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
             if e != nil { logging.Error(e); return e }
-            _, e = fout.WriteString(si.id + "\n" + "1" + "\n")
+            defer fout.Close()
+
+            _, e = buf.WriteTo(fout)
             if e != nil { logging.Error(e); return e }
-            j, e := json.Marshal(si.data)
-            if e != nil { logging.Error(e); return e }
-            fout.Write(j)
-            fout.Close()
         }
     }
     _ = time.AfterFunc(time.Minute, func(){_ = Init(sfn)})

@@ -17,7 +17,7 @@ import "github.com/pastebt/sess"
 
 sess.Init("/path/to/save/data/")
 ```
-If leave it as default "", session will keep in memory and will be lost when server stop.
+If set path as "", session will keep in memory and will be lost when server stop.
 
 
 ### Get / Set session
