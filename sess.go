@@ -176,13 +176,32 @@ func Start(w http.ResponseWriter, r *http.Request) (ses *Session) {
 }
 
 
+func (s *Session)SetCookieExpire(t time.Duration) {
+    si := s.si
+    var e = time.Time{}
+    if t > 0 {
+        e = time.Now().Add(t)
+    }
+    c := http.Cookie{Name:COOKIENAME, Value:si.id, Expires:e} //, Domain:"/"}
+    http.SetCookie(*(s.w), &c)
+    si.m.Lock()
+    if e.After(si.expire) {
+        si.expire = e
+    }
+    si.m.Unlock()
+
+}
+
+
 func (s *Session)Set(name string, value string) {
     si := s.si
     e := time.Now().Add(sessPool.keep)
     c := http.Cookie{Name:COOKIENAME, Value:si.id, Expires:e} //, Domain:"/"}
     http.SetCookie(*(s.w), &c)
     si.m.Lock()
-    si.expire = e
+    if e.After(si.expire) {
+        si.expire = e
+    }
     si.data[name] = value
     si.m.Unlock()
 
