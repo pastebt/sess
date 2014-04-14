@@ -2,12 +2,16 @@ package sess
 
 
 import (
+    "io"
     "os"
+    "fmt"
     "sync"
     "time"
     "bytes"
     "net/http"
     "io/ioutil"
+    "crypto/md5"
+    "crypto/rand"
     "path/filepath"
     "encoding/json"
     "github.com/pastebt/gslog"
@@ -85,6 +89,26 @@ func Init(sfn string) error {
 var logging = gslog.GetLogger("")
 
 
+func genId(addr string) (ret string) {
+    h := md5.New()
+    b := make([]byte, 10)
+    _, _ = rand.Read(b)
+    io.WriteString(h, string(b))
+    io.WriteString(h, addr)
+    io.WriteString(h, time.Now().String())
+    for _, b := range h.Sum(nil) {
+        if '0' <= b && b <= '9' ||
+           'a' <= b && b <= 'z' ||
+           'A' <= b && b <= 'Z' {
+            ret += string(b)
+        } else {
+            ret += fmt.Sprintf("%x", b)
+        }
+    }
+    return
+}
+
+
 func Start(w http.ResponseWriter, r *http.Request) (ses *Session) {
     c, e := r.Cookie(COOKIENAME)
     logging.Debug("e =", e)
@@ -98,7 +122,7 @@ func Start(w http.ResponseWriter, r *http.Request) (ses *Session) {
     logging.Debug("Start si =", si)
     if si == nil {
         logging.Debug("Start new si")
-        id := "1234"    // TODO, generate id
+        id := genId(r.RemoteAddr)
         si = &sessInfo{id:id, m:&(sync.Mutex{}),
                        data:make(map[string]string)}
     }
