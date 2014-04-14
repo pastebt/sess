@@ -20,6 +20,7 @@ import (
 
 const (
     COOKIENAME string = "MYGOSESSIONID"
+    TIMELAYOUT string = "2006-01-02 15:04:05"
 )
 
 
@@ -40,16 +41,67 @@ type Session struct {
 var sessPool = struct {
     m *sync.Mutex
     path string
+    keep time.Duration
     sess map[string]*sessInfo
-} {&(sync.Mutex{}), "", make(map[string]*sessInfo)}
+} {&(sync.Mutex{}), "", time.Hour * 7 * 24,  make(map[string]*sessInfo)}
+
+
+func readOneSessFile(fn string) (si *sessInfo, err error) {
+    logging.Debug("load session", fn)
+    dat, err := ioutil.ReadFile(fn)
+    if err != nil { return }
+
+    lines := bytes.SplitN(dat, []byte("\n"), 3)
+    si = &sessInfo{id:string(lines[0]), m:&sync.Mutex{}}
+
+    //si.expire
+    si.expire, err = time.Parse(TIMELAYOUT, string(lines[1]))
+    if err != nil { return }
+    if si.expire.Before(time.Now()) {
+        // this session is expired, remove file
+        err = os.Remove(fn)
+        return nil, err
+    }
+    err = json.Unmarshal(lines[2], &si.data)
+    if err != nil { return }
+    return
+}
+
+
+func saveOneSessFile(sfn string, si *sessInfo) (err error) {
+    if (si.expire.Before(time.Now())) {
+        return
+    }
+    logging.Debug("saveOneSessFile ", si.id)
+    j, err := json.Marshal(si.data)
+    if err != nil { return }
+
+    buf := new(bytes.Buffer)
+    buf.WriteString(si.id + "\n")
+    buf.WriteString(si.expire.Format(TIMELAYOUT) + "\n")
+    buf.Write(j)
+
+    fout, err := os.OpenFile(filepath.Join(sfn, si.id) + ".sess",
+                             os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+    if err != nil { return }
+    defer fout.Close()
+
+    _, err = buf.WriteTo(fout)
+    return
+}
 
 
 // save file name to be used save session data
 // start the monitor thread to save it periodly
 // Should be called before server start
-func Init(sfn string) error {
+func Init(sfn string, keep time.Duration) (err error) {
+    var si *sessInfo
     sessPool.m.Lock()
     defer sessPool.m.Unlock()
+
+    if keep > 0 {
+        sessPool.keep = keep
+    }
 
     if sessPool.path == "" { // load from disk
         logging.Debug("load session from disk")
@@ -57,37 +109,23 @@ func Init(sfn string) error {
         fs, e := filepath.Glob(filepath.Join(sfn, "*.sess"))
         if e != nil { return e }
         for _, f := range fs {
-            logging.Debug("load session", f)
-            dat, e := ioutil.ReadFile(f)
-            if e != nil { logging.Error(e); return e }
-            lines := bytes.SplitN(dat, []byte("\n"), 3)
-            si := &sessInfo{id:string(lines[0]), m:&sync.Mutex{}}
-            //si.expire = TODO
-            e = json.Unmarshal(lines[2], &si.data)
-            if e != nil { logging.Error(e); return e }
-            sessPool.sess[si.id] = si
+            si, err = readOneSessFile(f)
+            if err != nil {
+                logging.Error(err)
+            } else if si != nil {
+                sessPool.sess[si.id] = si
+            }
         }
     } else {                // save to disk
         logging.Debug("save session to disk")
-        for n, si := range sessPool.sess {
-            j, e := json.Marshal(si.data)
-            if e != nil { logging.Error(e); return e }
-
-            buf := new(bytes.Buffer)
-            buf.WriteString(si.id + "\n")
-            buf.WriteString("0" + "\n") // TODO expire time
-            buf.Write(j)
-
-            fout, e := os.OpenFile(filepath.Join(sfn, n) + ".sess",
-                                   os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
-            if e != nil { logging.Error(e); return e }
-            defer fout.Close()
-
-            _, e = buf.WriteTo(fout)
-            if e != nil { logging.Error(e); return e }
+        for _, si = range sessPool.sess {
+            err = saveOneSessFile(sfn, si)
+            if err != nil {
+                logging.Error(si.id, ": ", err)
+            }
         }
     }
-    _ = time.AfterFunc(time.Minute, func(){_ = Init(sfn)})
+    _ = time.AfterFunc(time.Minute, func(){ _ = Init(sfn, 0) })
     return nil
 }
 
@@ -139,9 +177,11 @@ func Start(w http.ResponseWriter, r *http.Request) (ses *Session) {
 
 func (s *Session)Set(name string, value string) {
     si := s.si
-    c := http.Cookie{Name:COOKIENAME, Value:si.id} //, Domain:"/"}
+    e := time.Now().Add(sessPool.keep)
+    c := http.Cookie{Name:COOKIENAME, Value:si.id, Expires:e} //, Domain:"/"}
     http.SetCookie(*(s.w), &c)
     si.m.Lock()
+    si.expire = e
     si.data[name] = value
     si.m.Unlock()
 
@@ -162,6 +202,7 @@ func (s *Session)Get(name string) (value string) {
     l := gslog.GetLogger("")
     l.Debugf("Get s.id=%s", s.si.id)
     l.Debug("Get si =", s.si.data)
+    s.si.expire = time.Now().Add(sessPool.keep)
     value = s.si.data[name]
     return
 }
