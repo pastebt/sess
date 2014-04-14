@@ -70,6 +70,7 @@ func readOneSessFile(fn string) (si *sessInfo, err error) {
 
 func saveOneSessFile(sfn string, si *sessInfo) (err error) {
     if (si.expire.Before(time.Now())) {
+        // this session expired, skip it
         return
     }
     logging.Debug("saveOneSessFile ", si.id)
@@ -187,7 +188,6 @@ func (s *Session)Set(name string, value string) {
 
     l := gslog.GetLogger("")
     l.Debugf("n=%s, v=%s, s.id=%s", name, value, si.id)
-    // TODO update expire
     sessPool.m.Lock()
     defer sessPool.m.Unlock()
     sessPool.sess[si.id] = si
