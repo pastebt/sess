@@ -12,6 +12,7 @@ import (
     "io/ioutil"
     "crypto/md5"
     "crypto/rand"
+    mrand "math/rand"
     "path/filepath"
     "encoding/json"
     "github.com/pastebt/gslog"
@@ -149,6 +150,9 @@ func genId(addr string) (ret string) {
         } else {
             ret += fmt.Sprintf("%x", b)
         }
+    }
+    for ;len(ret) < 32; {
+        ret += string(ret[mrand.Intn(len(ret))])
     }
     return
 }
