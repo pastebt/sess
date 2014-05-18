@@ -12,6 +12,7 @@ import (
     "io/ioutil"
     "crypto/md5"
     "crypto/rand"
+    "sync/atomic"
     mrand "math/rand"
     "path/filepath"
     "encoding/json"
@@ -29,6 +30,7 @@ type sessInfo struct {
     id string
     m *sync.Mutex
     expire time.Time
+    flag int32      // == 1 means need save
     data map[string]string
 }
 
@@ -74,6 +76,8 @@ func saveOneSessFile(sfn string, si *sessInfo) (err error) {
         // this session expired, skip it
         return
     }
+    if atomic.LoadInt32(&si.flag) == 0 { return }
+    atomic.StoreInt32(&si.flag, 0)
     logging.Debug("saveOneSessFile ", si.id)
     j, err := json.Marshal(si.data)
     if err != nil { return }
@@ -160,7 +164,7 @@ func genId(addr string) (ret string) {
 
 func Start(w http.ResponseWriter, r *http.Request) (ses *Session) {
     c, e := r.Cookie(COOKIENAME)
-    logging.Debug("e =", e)
+    logging.Debug("sess.Start: e =", e)
     var si *sessInfo
     if e == nil {
         logging.Debugf("Start n = %s, v = %s", c.Name, c.Value)
@@ -208,6 +212,7 @@ func (s *Session)Set(name string, value string) {
     }
     si.data[name] = value
     si.m.Unlock()
+    atomic.StoreInt32(&si.flag, 1)
 
     l := gslog.GetLogger("")
     l.Debugf("n=%s, v=%s, s.id=%s", name, value, si.id)
@@ -226,6 +231,7 @@ func (s *Session)Get(name string) (value string) {
     l.Debugf("Get s.id=%s", s.si.id)
     l.Debug("Get si =", s.si.data)
     s.si.expire = time.Now().Add(sessPool.keep)
+    atomic.StoreInt32(&s.si.flag, 1)
     value = s.si.data[name]
     return
 }
