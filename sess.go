@@ -22,7 +22,7 @@ import (
 
 const (
     COOKIENAME string = "MYGOSESSIONID"
-    TIMELAYOUT string = "2006-01-02 15:04:05"
+    TIMELAYOUT string = "2006-01-02 15:04:05 -0700"
 )
 
 
@@ -62,6 +62,7 @@ func readOneSessFile(fn string) (si *sessInfo, err error) {
     if err != nil { return }
     if si.expire.Before(time.Now()) {
         // this session is expired, remove file
+        logging.Debugf("expire line = %s, %v", string(lines[1]), time.Now())
         err = os.Remove(fn)
         return nil, err
     }

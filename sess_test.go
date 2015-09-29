@@ -36,4 +36,12 @@ func TestStart(tst *testing.T) {
     s.Set("abc", "123")
     v := s.Get("abc")
     tst.Logf("Get %v", v)
+    e = Init("/tmp", 0)     // save session into file
+    if e != nil { tst.Error(e) }
+    // 
+    w = httptest.NewRecorder()
+    c := http.Cookie{Name: COOKIENAME, Value: s.si.id, Expires: time.Now().Add(10 * time.Second) }
+    r.AddCookie(&c)
+    s = Start(w, r)
+    //
 }
