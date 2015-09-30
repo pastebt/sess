@@ -6,6 +6,7 @@ import (
     "time"
     "bufio"
     "strings"
+    "syscall"
     "net/http"
     "io/ioutil"
     "net/http/httptest"
@@ -49,16 +50,58 @@ func TestStart(tst *testing.T) {
 
 
 func TestReadOneSessFile(tst *testing.T) {
-    s, e := readOneSessFile("/tmp/abcd.aaa")
+    fn := "/tmp/abcd.aaa"
+    syscall.Unlink(fn)
+    s, e := readOneSessFile(fn)
     if s != nil || e == nil {
         tst.Errorf("Should return error, get s=%v, e=%v", s, e)
     }
-    e = ioutil.WriteFile("/tmp/abcd.aaa", []byte("1234"), 0666)
+
+    e = ioutil.WriteFile(fn, []byte("1234"), 0666)
     if e != nil {
         tst.Errorf("Write file error %v", e)
     }
-    s, e = readOneSessFile("/tmp/abcd.aaa")
+    s, e = readOneSessFile(fn)
     if s != nil || e == nil {
         tst.Errorf("Should return error, get s=%v, e=%v", s, e)
     }
+
+    syscall.Unlink(fn)
+    e = ioutil.WriteFile(fn, []byte("1234\n2015\n11"), 0666)
+    if e != nil {
+        tst.Errorf("Write file error %v", e)
+    }
+    s, e = readOneSessFile(fn)
+    if e == nil {
+        tst.Errorf("Should return error, get s=%v, e=%v", s, e)
+    } else {
+        tst.Logf("return s=%v, e=%v", s, e)
+    }
+
+    // time format ok, but expired
+    syscall.Unlink(fn)
+    e = ioutil.WriteFile(fn, []byte("1234\n2015-01-02 12:13:14 -0700\n{}"), 0666)
+    if e != nil {
+        tst.Errorf("Write file error %v", e)
+    }
+    s, e = readOneSessFile(fn)
+    if s != nil || e != nil {
+        tst.Errorf("Should return not error, get s=%v, e=%v", s, e)
+    } else {
+        tst.Logf("return s=%v, e=%v", s, e)
+    }
+
+    // every thing ok
+    syscall.Unlink(fn)
+    e = ioutil.WriteFile(fn, []byte("1234\n2030-01-02 12:13:14 -0700\n{}"), 0666)
+    if e != nil {
+        tst.Errorf("Write file error %v", e)
+    }
+    s, e = readOneSessFile(fn)
+    if s == nil || e != nil {
+        tst.Errorf("Should return not error, get s=%v, e=%v", s, e)
+    } else {
+        tst.Logf("return s=%v, e=%v", s, e)
+    }
+
 }

@@ -71,7 +71,7 @@ func readOneSessFile(fn string) (si *sessInfo, err error) {
         return nil, err
     }
     err = json.Unmarshal(lines[2], &si.data)
-    if err != nil { return }
+    //if err != nil { return }
     return
 }
 
