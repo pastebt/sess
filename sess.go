@@ -55,6 +55,10 @@ func readOneSessFile(fn string) (si *sessInfo, err error) {
     if err != nil { return }
 
     lines := bytes.SplitN(dat, []byte("\n"), 3)
+    if len(lines) < 3 {
+        err = fmt.Errorf("Bad format")
+        return
+    }
     si = &sessInfo{id:string(lines[0]), m:&sync.Mutex{}}
 
     //si.expire

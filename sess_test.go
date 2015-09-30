@@ -7,6 +7,7 @@ import (
     "bufio"
     "strings"
     "net/http"
+    "io/ioutil"
     "net/http/httptest"
 )
 
@@ -44,4 +45,20 @@ func TestStart(tst *testing.T) {
     r.AddCookie(&c)
     s = Start(w, r)
     //
+}
+
+
+func TestReadOneSessFile(tst *testing.T) {
+    s, e := readOneSessFile("/tmp/abcd.aaa")
+    if s != nil || e == nil {
+        tst.Errorf("Should return error, get s=%v, e=%v", s, e)
+    }
+    e = ioutil.WriteFile("/tmp/abcd.aaa", []byte("1234"), 0666)
+    if e != nil {
+        tst.Errorf("Write file error %v", e)
+    }
+    s, e = readOneSessFile("/tmp/abcd.aaa")
+    if s != nil || e == nil {
+        tst.Errorf("Should return error, get s=%v, e=%v", s, e)
+    }
 }
