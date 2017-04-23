@@ -113,6 +113,8 @@ func Init(sfn string, keep time.Duration) (err error) {
     if keep > 0 {
         sessPool.keep = keep
     }
+    // sfn == "", data keep in memory
+    if sfn == "" { return }
 
     if sessPool.path == "" { // load from disk
         logging.Debug("load session from disk")
