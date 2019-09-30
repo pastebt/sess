@@ -13,10 +13,10 @@ import (
     "crypto/md5"
     "crypto/rand"
     "sync/atomic"
-    mrand "math/rand"
+mrand "math/rand"
     "path/filepath"
     "encoding/json"
-    "github.com/pastebt/gslog"
+gslog "fgdwcfgo/log"
 )
 
 
@@ -31,13 +31,14 @@ type sessInfo struct {
     m *sync.Mutex
     expire time.Time
     flag int32      // == 1 means need save
-    data map[string]string
+    data map[string]interface{}
 }
 
 
 type Session struct {
     si *sessInfo
-    w *http.ResponseWriter
+    w  *http.ResponseWriter
+    ck *http.Cookie
 }
 
 
@@ -170,6 +171,11 @@ func genId(addr string) (ret string) {
 
 
 func Start(w http.ResponseWriter, r *http.Request) (ses *Session) {
+    return StartAt(w, r, &http.Cookie{})
+}
+
+
+func StartAt(w http.ResponseWriter, r *http.Request, ck *http.Cookie) (ses *Session) {
     c, e := r.Cookie(COOKIENAME)
     logging.Debug("sess.Start: e =", e)
     var si *sessInfo
@@ -184,11 +190,22 @@ func Start(w http.ResponseWriter, r *http.Request) (ses *Session) {
         logging.Debug("Start new si")
         id := genId(r.RemoteAddr)
         si = &sessInfo{id:id, m:&(sync.Mutex{}),
-                       data:make(map[string]string)}
+                       data:make(map[string]interface{})}
     }
-    ses = &Session{si, &w}
+    ses = &Session{si, &w, ck}
+    ses.ck.Name = COOKIENAME
+    ses.ck.Value = si.id
     return
 }
+
+
+/*
+func (s *Session)mkCookie(e time.Time) (c *http.Cookie){
+    c = &http.Cookie{Name:COOKIENAME, Value:s.si.id, Expires:e}
+    // FIXME copy configure from s.ckp to c
+    return
+}
+*/
 
 
 func (s *Session)SetCookieExpire(t time.Duration) {
@@ -197,8 +214,10 @@ func (s *Session)SetCookieExpire(t time.Duration) {
     if t > 0 {
         e = time.Now().Add(t)
     }
-    c := http.Cookie{Name:COOKIENAME, Value:si.id, Expires:e} //, Domain:"/"}
-    http.SetCookie(*(s.w), &c)
+    //c := http.Cookie{Name:COOKIENAME, Value:si.id, Expires:e} //, Domain:"/"}
+    //http.SetCookie(*(s.w), &c)
+    s.ck.Expires = e
+    http.SetCookie(*(s.w), s.ck)
     si.m.Lock()
     if e.After(si.expire) {
         si.expire = e
@@ -208,11 +227,13 @@ func (s *Session)SetCookieExpire(t time.Duration) {
 }
 
 
-func (s *Session)Set(name string, value string) {
+func (s *Session)Set(name string, value interface{}) {
     si := s.si
     e := time.Now().Add(sessPool.keep)
-    c := http.Cookie{Name:COOKIENAME, Value:si.id, Expires:e} //, Domain:"/"}
-    http.SetCookie(*(s.w), &c)
+    //c := http.Cookie{Name:COOKIENAME, Value:si.id, Expires:e} //, Domain:"/"}
+    //http.SetCookie(*(s.w), &c)
+    s.ck.Expires = e
+    http.SetCookie(*(s.w), s.ck)
     si.m.Lock()
     if e.After(si.expire) {
         si.expire = e
@@ -222,16 +243,16 @@ func (s *Session)Set(name string, value string) {
     atomic.StoreInt32(&si.flag, 1)
 
     l := gslog.GetLogger("")
-    l.Debugf("n=%s, v=%s, s.id=%s", name, value, si.id)
+    l.Debugf("n=%s, v=%#v, s.id=%s", name, value, si.id)
     sessPool.m.Lock()
     defer sessPool.m.Unlock()
     sessPool.sess[si.id] = si
-    l.Debug("sessPool =", sessPool.sess)
-    l.Debug("si =", si.data)
+    l.Debugf("sessPool = %#v", sessPool.sess)
+    l.Debugf("si = %#v", si.data)
 }
 
 
-func (s *Session)Get(name string) (value string) {
+func (s *Session)Get(name string) (value interface{}) {
     s.si.m.Lock()
     defer s.si.m.Unlock()
     l := gslog.GetLogger("")
@@ -241,4 +262,15 @@ func (s *Session)Get(name string) (value string) {
     atomic.StoreInt32(&s.si.flag, 1)
     value = s.si.data[name]
     return
+}
+
+
+func (s *Session)DumpJson() ([]byte, error) {
+    s.si.m.Lock()
+    defer s.si.m.Unlock()
+    j, err := json.Marshal(s.si.data)
+    if err != nil {
+        gslog.Debugf("json.Marshal(%v) return %v", s.si.data, err)
+    }
+    return j, err
 }
